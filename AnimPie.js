@@ -191,9 +191,7 @@ var AnimPie = (function () {
             context.timeout += 20;
             setTimeout(function (context, increment) {
                 for (i = 0; i < arrayLength; i++) {
-                    if (i % 2 === 1) {
-                        increment *= -1; // invert direction of odds.
-                    }
+                    increment *= -1; // invert direction of each arc
                     context.arcs[i].startRadians = degsToRadians(radsToDegrees(context.arcs[i].startRadians) + increment);
                     context.arcs[i].endRadians = degsToRadians(radsToDegrees(context.arcs[i].endRadians) + increment);
                 }
