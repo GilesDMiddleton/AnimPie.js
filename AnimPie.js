@@ -1,4 +1,4 @@
-﻿// http://opensource.org/licenses/MIT
+// http://opensource.org/licenses/MIT
 //Copyright (c) 2014 Giles Middleton (@GilesDMiddleton, gilesey.wordpress.com)
 //
 //Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -30,7 +30,6 @@
 // allow plugin of colours
 // review the animation mechanism/maybe do this in D3?
 // performance tune/tweak/use tweens?
-// get rid of overkill 'stricts'
 // review comments etc
 
 var AnimPie = (function () {
@@ -40,7 +39,6 @@ var AnimPie = (function () {
     // UTILS
     // why isn't this already standard!
     function radsToDegrees(rad) {
-        'use strict';
         // afford some level of protection to keep degrees 0-360
         if (rad < 0) {
             return raddegrees(rad + (2 * Math.PI));
@@ -49,7 +47,6 @@ var AnimPie = (function () {
     }
 
     function degsToRadians(deg) {
-        'use strict';
         // afford some level of protection to keep radians 0-2pi
         if (deg < 0) {
             return degsToRadians((deg + 360) % 360);
@@ -57,7 +54,7 @@ var AnimPie = (function () {
         return deg * (Math.PI / 180);
     }
     // store the state of each arc
-    function arc() {
+    function Arc() {
         this.value = 0; // the value in data terms 
         this.percent = 0; // the percentage of this value compared to the total (calculated)
         this.radians = 0; // the number of radians this arc comprises of
@@ -91,7 +88,7 @@ var AnimPie = (function () {
 
         // fill in arc properties
         for (i = 0; i < arrayLength; i++) {
-            newArc = new arc();
+            newArc = new Arc();
             newArc.value = data[i];
             newArc.percent = (newArc.value / total) * 100;
             newArc.radians = degsToRadians((360 / 100) * newArc.percent);
@@ -105,19 +102,22 @@ var AnimPie = (function () {
     }
 
     function setArcsRadius(context, r) {
-        'use strict';
         var arrayLength = context.arcs.length;
         for (var i = 0; i < arrayLength; i++) {
             context.arcs[i].radius = r;
         }
     }
+    
+    
+    function getColourForSegment( context, segment ){
+        var paletteEntries = context.palette.length;
+        return context.palette[segment % paletteEntries];
+    }
 
     function drawArcs(context) {
-        'use strict';
         var arrayLength = context.arcs.length,
             ctx = context.ctx2d,
-            i = 0,
-            colourBlend = 0;
+            i = 0;
 
 
         for (i = 0; i < arrayLength; i++) {
@@ -125,15 +125,12 @@ var AnimPie = (function () {
             // not breaking the data up at this point
             ctx.arc(context.arcs[i].originX, context.arcs[i].originY, context.arcs[i].radius, context.arcs[i].startRadians, context.arcs[i].endRadians, false);
             ctx.lineWidth = 10;
-            colourBlend = 255 * (context.arcs[i].percent / 100);
-            colourBlend = Math.floor(colourBlend);
-            ctx.strokeStyle = 'rgb(' + colourBlend + ',' + colourBlend + ',' + colourBlend + ')';
+            ctx.strokeStyle = getColourForSegment( context, i );
             ctx.stroke();
         }
     }
 
     function drawLines(context) {
-        'use strict';
         var arrayLength = context.lines.length,
             ctx = context.ctx2d,
             i = 0;
@@ -150,7 +147,6 @@ var AnimPie = (function () {
     }
 
     function _clearCanvas(context) {
-        'use strict';
         var ctx = context.ctx2d;
 
         ctx.clearRect(0, 0, context.canvas.width, context.canvas.height);
@@ -160,14 +156,12 @@ var AnimPie = (function () {
     // ANIMS
 
     function _expandCircle(context,radius) {
-        'use strict';
         _clearCanvas(context);
         setArcsRadius(context, radius);
         drawArcs(context);
     }
 
     function expandCircle(context) {
-        'use strict';
         var i = 10,
             timeRet = 0;
 
@@ -178,7 +172,6 @@ var AnimPie = (function () {
     }
 
     function rotateArcs(context) {
-        'use strict';
 
         // loop through N degrees and update the radians and draw.
 
@@ -202,7 +195,6 @@ var AnimPie = (function () {
     }
 
     function explodeCircle(context) {
-        'use strict';
         // calculate bump stops before drawing
         var i = 0,
             arrayLength = context.arcs.length,
@@ -223,7 +215,6 @@ var AnimPie = (function () {
 
     // step 2 draws segments of the donut expanded away from a starting point
     function _explodeCircle(radius, context) {
-        'use strict';
         // now for each of the segments start stripping them apart from each other
         // first segment stays at starting radius
         // other segments move out to radius and lock in position when they are apart.
@@ -245,7 +236,6 @@ var AnimPie = (function () {
 
     // callout lines - work out start and end points
     function calloutLines(context) {
-        'use strict';
         var arrayLength = context.arcs.length,
             i = 0;
         context.lines = [];
@@ -287,9 +277,7 @@ var AnimPie = (function () {
         setTimeout(drawText, context.timeout, context, 45);
     }
 
-    function drawText(context, length) {
-        'use strict';
-       
+    function drawText(context, length) {    
         var ctx = context.ctx2d;
 
         ctx.fillStyle = "#000000";
@@ -347,6 +335,12 @@ var AnimPie = (function () {
             // find canvas element and drawing context
             context.canvas = document.getElementById(canvasElementId);
             context.ctx2d = context.canvas.getContext("2d");
+            
+            // initialize our colour palette
+            context.palette = ["#F2EFE2","#E6D5BF","#FFA063","#E66D00","#7D2C2B"];
+            for( var i=0; i<context.palette.length; i++ ){
+                console.log(context.palette[i]);
+            }
             context.timeout = 100; // initial starting time
 
             // these methods know about a context, which should have an array of arcs
@@ -377,5 +371,3 @@ function calculateTextHeight(fontInlineStyle,text) {
   body.removeChild(tempelement);
   return result;
 };*/
-
-
