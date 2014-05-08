@@ -24,8 +24,6 @@
 // Lots more to do:
 // extract out common math functions
 // Make this part of a bigger library?
-// allow callers to hook into the pipeline and change things
-// make this scale with the area provided, not just fixed coordinates.
 // allow configuration of durations, radius extensions
 // allow plugin of colours
 // review the animation mechanism/maybe do this in D3?
@@ -107,9 +105,9 @@ var AnimPie = (function () {
             context.arcs[i].radius = r;
         }
     }
-    
-    
-    function getColourForSegment( context, segment ){
+
+
+    function getColourForSegment(context, segment) {
         var paletteEntries = context.palette.length;
         return context.palette[segment % paletteEntries];
     }
@@ -125,7 +123,7 @@ var AnimPie = (function () {
             // not breaking the data up at this point
             ctx.arc(context.arcs[i].originX, context.arcs[i].originY, context.arcs[i].radius, context.arcs[i].startRadians, context.arcs[i].endRadians, false);
             ctx.lineWidth = 10;
-            ctx.strokeStyle = getColourForSegment( context, i );
+            ctx.strokeStyle = getColourForSegment(context, i);
             ctx.stroke();
         }
     }
@@ -152,10 +150,15 @@ var AnimPie = (function () {
         ctx.clearRect(0, 0, context.canvas.width, context.canvas.height);
     }
 
+    // return the maximum width/height we can use that keeps us square
+    function getSquareDistance(context) {
+        return Math.min(context.canvas.width, context.canvas.height);
+    }
+
     ////////////////////////////////////////
     // ANIMS
 
-    function _expandCircle(context,radius) {
+    function _expandCircle(context, radius) {
         _clearCanvas(context);
         setArcsRadius(context, radius);
         drawArcs(context);
@@ -163,10 +166,13 @@ var AnimPie = (function () {
 
     function expandCircle(context) {
         var i = 10,
-            timeRet = 0;
+            timeRet = 0,
+            targetRadius = context.expandsTo;
+        // targetRadius set to 20% of area
 
-        for (i = 10; i < 50; i++) {
-            context.timeout += 10;
+        // achieve this at 40fps, 40ms
+        for (i = 10; i < targetRadius; i += ((targetRadius - 10) / 40)) {
+            context.timeout += 25;
             setTimeout(_expandCircle, context.timeout, context, i);
         }
     }
@@ -198,17 +204,21 @@ var AnimPie = (function () {
         // calculate bump stops before drawing
         var i = 0,
             arrayLength = context.arcs.length,
-            timeRet = 0;
+            timeRet = 0,
+            targetRadius = context.explodesTo,
+            startingRadius = context.expandsTo;
+
         // ensure this code is run just before the animation starts, otherwise
         // radius isn't filled in yet.
         setTimeout(function () {
             for (i = 0; i < arrayLength; i++) {
-                context.arcs[i].explodeCircleBumpStop = (i * 15) + context.arcs[i].radius;
+                context.arcs[i].explodeCircleBumpStop = (i * context.gapBetweenExplodedArcs) + context.arcs[i].radius;
             }
         }, context.timeout);
-        
-        for (i = 50; i < 140; i++) {
-            context.timeout += 10;
+
+        // achieve this in 1 second at 40fps
+        for (i = startingRadius; i < targetRadius; i = i + ((targetRadius - startingRadius) / 40)) {
+            context.timeout += 25;
             setTimeout(_explodeCircle, context.timeout, i, context);
         }
     }
@@ -258,7 +268,7 @@ var AnimPie = (function () {
         context.timeout++;
 
         // 30 pixels long line, drawn a pixel at a time
-        for (i = 0; i < 50; i++) {
+        for (i = 0; i < context.linelength; i++) {
             context.timeout += 10;
             setTimeout(function (context, length) {
                 var line = 0;
@@ -277,7 +287,7 @@ var AnimPie = (function () {
         setTimeout(drawText, context.timeout, context, 45);
     }
 
-    function drawText(context, length) {    
+    function drawText(context, length) {
         var ctx = context.ctx2d;
 
         ctx.fillStyle = "#000000";
@@ -327,26 +337,32 @@ var AnimPie = (function () {
         getVersion: function () {
             return 1;
         },
-        makePie: function (data, canvasElementId) {
+        makePie: function (data, canvasElementId, preWorkFn) {
             // a pie chart constructed for you, pass array of numerics and the canvas element
 
             var context = {};
-            
+
             // find canvas element and drawing context
             context.canvas = document.getElementById(canvasElementId);
             context.ctx2d = context.canvas.getContext("2d");
-            
+
             // initialize our colour palette
-            context.palette = ["#F2EFE2","#E6D5BF","#FFA063","#E66D00","#7D2C2B"];
-            for( var i=0; i<context.palette.length; i++ ){
-                console.log(context.palette[i]);
-            }
+            context.palette = ["#F2EFE2", "#E6D5BF", "#FFA063", "#E66D00", "#7D2C2B"];
             context.timeout = 100; // initial starting time
 
             // these methods know about a context, which should have an array of arcs
             context.arcs = arcsFromData(data);
-            initializeArcsOrigin(context, context.canvas.width/2, context.canvas.height/2);
-            
+            initializeArcsOrigin(context, context.canvas.width / 2, context.canvas.height / 2);
+
+            context.expandsTo = getSquareDistance(context) * 0.2;
+            context.explodesTo = getSquareDistance(context) * 0.5;
+            context.linelength = getSquareDistance(context) * 0.1;
+            context.gapBetweenExplodedArcs = 15;
+
+            if (typeof preWorkFn === 'function') {
+                preWorkFn(context);
+            }
+
             expandCircle(context);
             context.timeout += 500; // gap
             explodeCircle(context);
