@@ -51,6 +51,12 @@ var AnimPie = (function () {
         }
         return deg * (Math.PI / 180);
     }
+
+    // gets the distance between two points http://en.wikipedia.org/wiki/Distance
+    function getEuclidianDistance(x1, y1, x2, y2) {
+        return Math.sqrt(Math.pow((x2 - x1), 2) + Math.pow((y2 - y1), 2));
+    }
+
     // store the state of each arc
     function Arc() {
         this.value = 0; // the value in data terms 
@@ -270,10 +276,27 @@ var AnimPie = (function () {
         function initializeBumpStops(context) {
             var i = 0;
             var arrayLength = context.arcs.length;
+            var euclidianDistance = 0;
+            var startX = 0;
+            var startY = 0;
+            var endX = 0;
+            var endY = 0;
 
             for (i = 0; i < arrayLength; i++) {
                 context.arcs[i].explodeCircleBumpStop = (i * context.gapBetweenExplodedArcs) + context.arcs[i].radius;
+                startX = context.arcs[i].originX + context.arcs[i].radius * Math.cos(context.arcs[i].startRadians);
+                startY = context.arcs[i].originY + context.arcs[i].radius * Math.sin(context.arcs[i].startRadians);
+                endX = context.arcs[i].originX + context.arcs[i].radius * Math.cos(context.arcs[i].endRadians);
+                endY = context.arcs[i].originY + context.arcs[i].radius * Math.sin(context.arcs[i].endRadians);
+                euclidianDistance = getEuclidianDistance(startX, startY, endX, endY);
+                // should probably put these under 'explodedetails' object as they are temporary
+                // we need to know the euclidian distance (distance between two points) so that we can use atan2 to work out what 
+                // angle the segment should be as it moves away from the center
+                // but maintains it's size on screen - otherwise a 10% arc isn't the same through the pie levels as it moves away
+                context.arcs[i].euclidianHalfDistance = euclidianDistance / 2;
+                context.arcs[i].radianMidPoint = context.arcs[i].startRadians + ((context.arcs[i].endRadians - context.arcs[i].startRadians) / 2);
             }
+
         }
 
         // draws segments of the donut expanded away from a starting point
@@ -283,22 +306,35 @@ var AnimPie = (function () {
             // other segments move out to radius and lock in position when they are apart.
             var arrayLength = context.arcs.length;
             var i = 0;
+            var newRadians = 0;
 
             for (i = 0; i < arrayLength; i++) {
                 if (context.arcs[i].radius < context.arcs[i].explodeCircleBumpStop) {
+                    // calculate new start and end radian based on new radius and euclidian distance
                     context.arcs[i].radius = radius;
+                    // we know the distance, and we know the radius, so use TAN to get the angle from the center.
+                    newRadians = Math.atan(context.arcs[i].euclidianHalfDistance / radius);
+                    // update the start/end radians
+                    context.arcs[i].startRadians = context.arcs[i].radianMidPoint - newRadians;
+                    context.arcs[i].endRadians = context.arcs[i].radianMidPoint + newRadians;
+                    // need to abstract this so object is in a healthy state, and I don't have to remember to do this.
+                    context.arcs[i].radians = context.arcs[i].endRadians - context.arcs[i].startRadians;
                 }
                 if (context.arcs[i].radius > context.arcs[i].explodeCircleBumpStop) {
                     context.arcs[i].radius = context.arcs[i].explodeCircleBumpStop;
                 }
+
             }
             clearCanvas(context);
             drawArcs(context);
         }
         // ensure this code is run just before the animation starts, otherwise
         // radius might not be correct
+        context.timeout += 100;
+
         setTimeout(initializeBumpStops, context.timeout, context);
 
+        context.timeout += 100;
         // achieve this in 1 second at 40fps
         for (i = startingRadius; i < targetRadius; i = i + ((targetRadius - startingRadius) / 40)) {
             context.timeout += 25;
@@ -307,6 +343,7 @@ var AnimPie = (function () {
             i,
             context);
         }
+        context.timeout += 100;
     }
 
     // animate callout lines - work out start and end points
@@ -351,6 +388,7 @@ var AnimPie = (function () {
                 length * Math.sin(context.lines[line].angle));
             }
         }
+        context.timeout++;
         // initialize during the pipleline, so we can keep an updated radian value
         // if we change this, we just need to scan over the existing lines and correct.
         setTimeout(initializeCalloutLines, context.timeout, context);
@@ -388,7 +426,7 @@ var AnimPie = (function () {
             context.ctx2d = context.canvas.getContext("2d");
 
             // initialize our colour palette
-            context.palette = ["#F2EFE2", "#E6D5BF", "#FFA063", "#E66D00", "#7D2C2B"];
+            context.palette = ["#E2DED2", "#D6AABF", "#FFA063", "#E66D00", "#7D2C2B", "#552C2B"];
             context.timeout = 100; // initial starting time
 
             // these methods know about a context, which should have an array of arcs
