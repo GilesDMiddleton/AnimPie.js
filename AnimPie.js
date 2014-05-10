@@ -63,6 +63,7 @@ var AnimPie = (function () {
         this.originY = 0; // the origin
     }
 
+    // set the origin coordinates of all arcs to x and y
     function initializeArcsOrigin(context, x, y) {
         var arrayLength = context.arcs.length;
         for (var i = 0; i < arrayLength; i++) {
@@ -71,20 +72,21 @@ var AnimPie = (function () {
         }
     }
 
+    // construct an array of arcs from the array of data
     function arcsFromData(data) {
-        var arrayLength = data.length,
-            i = 0,
-            total = 0,
-            arcs = [],
-            currentAngle = 0,
-            newArc;
+        var arrayLength = data.length;
+        var i = 0;
+        var total = 0; // total amount of all values, to calculate a percentage
+        var arcs = []; // primary return object - an array of arc structures
+        var newArc; // each iteration of the loop creates a new arc
 
         // calculate total to work out percentages
         for (i = 0; i < arrayLength; i++) {
             total += data[i];
         }
 
-        // fill in arc properties
+        // fill in arc properties, each arc's length is proportional to the 
+        // percentage of the total.
         for (i = 0; i < arrayLength; i++) {
             newArc = new Arc();
             newArc.value = data[i];
@@ -99,6 +101,7 @@ var AnimPie = (function () {
         return arcs;
     }
 
+    // update all arcs in the context to have radius R
     function setArcsRadius(context, r) {
         var arrayLength = context.arcs.length;
         for (var i = 0; i < arrayLength; i++) {
@@ -106,36 +109,39 @@ var AnimPie = (function () {
         }
     }
 
-
+    // get the colour given a segment index within context.arcs
     function getColourForSegment(context, segment) {
-        var paletteEntries = context.palette.length;
-        return context.palette[segment % paletteEntries];
+        return context.palette[segment % context.palette.length];
     }
 
+    // draw the arcs, wherever they may be
     function drawArcs(context) {
-        var arrayLength = context.arcs.length,
-            ctx = context.ctx2d,
-            i = 0;
-
+        var arrayLength = context.arcs.length;
+        var ctx = context.ctx2d;
+        var i = 0;
 
         for (i = 0; i < arrayLength; i++) {
             ctx.beginPath();
-            // not breaking the data up at this point
-            ctx.arc(context.arcs[i].originX, context.arcs[i].originY, context.arcs[i].radius, context.arcs[i].startRadians, context.arcs[i].endRadians, false);
-            ctx.lineWidth = 10;
+            ctx.arc(context.arcs[i].originX,
+            context.arcs[i].originY,
+            context.arcs[i].radius,
+            context.arcs[i].startRadians,
+            context.arcs[i].endRadians,
+            false);
+            ctx.lineWidth = 10; // todo make configurable
             ctx.strokeStyle = getColourForSegment(context, i);
             ctx.stroke();
         }
     }
 
+    // draw the callout lines
     function drawLines(context) {
-        var arrayLength = context.lines.length,
-            ctx = context.ctx2d,
-            i = 0;
+        var arrayLength = context.lines.length;
+        var ctx = context.ctx2d;
+        var i = 0;
 
         for (i = 0; i < arrayLength; i++) {
             ctx.beginPath();
-            // not breaking the data up at this point
             ctx.moveTo(context.lines[i].x, context.lines[i].y);
             ctx.lineTo(context.lines[i].toX, context.lines[i].toY);
             ctx.lineWidth = 1;
@@ -144,10 +150,9 @@ var AnimPie = (function () {
         }
     }
 
+    // helper function to clear the drawing surface
     function _clearCanvas(context) {
-        var ctx = context.ctx2d;
-
-        ctx.clearRect(0, 0, context.canvas.width, context.canvas.height);
+        context.ctx2d.clearRect(0, 0, context.canvas.width, context.canvas.height);
     }
 
     // return the maximum width/height we can use that keeps us square
@@ -158,68 +163,89 @@ var AnimPie = (function () {
     ////////////////////////////////////////
     // ANIMS
 
+    // helper to clear, adjust and draw arcs given a radius
     function _expandCircle(context, radius) {
         _clearCanvas(context);
         setArcsRadius(context, radius);
         drawArcs(context);
     }
 
+    // expand the arcs in the context so they animate from 10px to context.expandsTo
     function expandCircle(context) {
-        var i = 10,
-            timeRet = 0,
-            targetRadius = context.expandsTo;
+        var i = 10;
+        var targetRadius = context.expandsTo; // just easier to read
         // targetRadius set to 20% of area
 
         // achieve this at 40fps, 40ms
         for (i = 10; i < targetRadius; i += ((targetRadius - 10) / 40)) {
             context.timeout += 25;
-            setTimeout(_expandCircle, context.timeout, context, i);
+            setTimeout(_expandCircle,
+            context.timeout,
+            context,
+            i);
         }
     }
 
+    // helper to rotate arcs given a number of degrees to increment the arcs by
+    function _rotateArcs(context, increment) {
+        var i = 0;
+        var arrayLength = context.arcs.length;
+
+        for (i = 0; i < arrayLength; i++) {
+            if (increment % 2 === 0) {
+                increment *= -1; // invert direction of evens
+            }
+            context.arcs[i].startRadians = degsToRadians(radsToDegrees(context.arcs[i].startRadians) + increment);
+            context.arcs[i].endRadians = degsToRadians(radsToDegrees(context.arcs[i].endRadians) + increment);
+        }
+        _clearCanvas(context);
+        drawArcs(context);
+    }
+
+
+    // main function controlling the rotation stage
+    // loop through N degrees and update the radians and draw.
     function rotateArcs(context) {
-
-        // loop through N degrees and update the radians and draw.
-
-        var degs = 0,
-            i = 0,
-            arrayLength = context.arcs.length,
-            increment = 4;
+        var degs = 0;
+        var increment = 4; // the amount of degrees to animate by per frame
 
         for (degs = 0; degs < 180; degs += increment) {
             context.timeout += 20;
-            setTimeout(function (context, increment) {
-                for (i = 0; i < arrayLength; i++) {
-                    increment *= -1; // invert direction of each arc
-                    context.arcs[i].startRadians = degsToRadians(radsToDegrees(context.arcs[i].startRadians) + increment);
-                    context.arcs[i].endRadians = degsToRadians(radsToDegrees(context.arcs[i].endRadians) + increment);
-                }
-                _clearCanvas(context);
-                drawArcs(context);
-            }, context.timeout, context, increment);
+            setTimeout(_rotateArcs,
+            context.timeout,
+            context,
+            increment);
         }
     }
 
+    // initialize the point at which each arc should stop growing.
+    function _initializeBumpStops(context) {
+        var i = 0;
+        var arrayLength = context.arcs.length;
+
+        for (i = 0; i < arrayLength; i++) {
+            context.arcs[i].explodeCircleBumpStop = (i * context.gapBetweenExplodedArcs) + context.arcs[i].radius;
+        }
+    }
+
+    // main function controlling the initial expansion stage
     function explodeCircle(context) {
-        // calculate bump stops before drawing
-        var i = 0,
-            arrayLength = context.arcs.length,
-            timeRet = 0,
-            targetRadius = context.explodesTo,
-            startingRadius = context.expandsTo;
+        var i = 0;
+        var arrayLength = context.arcs.length;
+        var targetRadius = context.explodesTo;
+        var startingRadius = context.expandsTo;
 
         // ensure this code is run just before the animation starts, otherwise
-        // radius isn't filled in yet.
-        setTimeout(function () {
-            for (i = 0; i < arrayLength; i++) {
-                context.arcs[i].explodeCircleBumpStop = (i * context.gapBetweenExplodedArcs) + context.arcs[i].radius;
-            }
-        }, context.timeout);
+        // radius might not be correct
+        setTimeout(_initializeBumpStops, context.timeout, context);
 
         // achieve this in 1 second at 40fps
         for (i = startingRadius; i < targetRadius; i = i + ((targetRadius - startingRadius) / 40)) {
             context.timeout += 25;
-            setTimeout(_explodeCircle, context.timeout, i, context);
+            setTimeout(_explodeCircle,
+            context.timeout,
+            i,
+            context);
         }
     }
 
@@ -229,8 +255,8 @@ var AnimPie = (function () {
         // first segment stays at starting radius
         // other segments move out to radius and lock in position when they are apart.
 
-        var arrayLength = context.arcs.length,
-            i = 0;
+        var arrayLength = context.arcs.length;
+        var i = 0;
 
         for (i = 0; i < arrayLength; i++) {
             if (context.arcs[i].radius < context.arcs[i].explodeCircleBumpStop) {
@@ -244,54 +270,71 @@ var AnimPie = (function () {
         drawArcs(context);
     }
 
-    // callout lines - work out start and end points
-    function calloutLines(context) {
-        var arrayLength = context.arcs.length,
-            i = 0;
+    // helper to initialize the callout lines
+    function _initializeCalloutLines(context) {
+        var arrayLength = context.arcs.length;
+        var i = 0;
         context.lines = [];
 
-        setTimeout(function (context, arrayLength) {
+        for (i = 0; i < arrayLength; i++) {
+            context.lines[i] = {
+                x: 0,
+                y: 0,
+                angle: 0,
+                toX: 0,
+                toY: 0
+            };
+            context.lines[i].angle = context.arcs[i].startRadians + context.arcs[i].radians / 3;
+            context.lines[i].x = context.arcs[i].originX + ((context.arcs[i].radius) * Math.cos(context.lines[i].angle));
+            context.lines[i].y = context.arcs[i].originY + ((context.arcs[i].radius) * Math.sin(context.lines[i].angle));
+        }
+    }
 
-            for (i = 0; i < arrayLength; i++) {
-                context.lines[i] = {
-                    x: 0,
-                    y: 0,
-                    angle: 0,
-                    toX: 0,
-                    toY: 0
-                };
-                context.lines[i].angle = context.arcs[i].startRadians + context.arcs[i].radians / 3;
-                context.lines[i].x = context.arcs[i].originX + ((context.arcs[i].radius) * Math.cos(context.lines[i].angle));
-                context.lines[i].y = context.arcs[i].originY + ((context.arcs[i].radius) * Math.sin(context.lines[i].angle));
-            }
-        }, context.timeout, context, arrayLength);
+    // shouldn't this just be the generic draw and we draw what's in the pipleine? TODO
+    function _drawCalloutLines(context) {
+        _clearCanvas(context);
+        drawArcs(context);
+        drawLines(context);
+    }
+
+    function _updateCalloutLines(context, length) {
+        var line = 0;
+        var arrayLength = context.lines.length;
+        for (line = 0; line < arrayLength; line++) {
+            context.lines[line].toX = context.lines[line].x + (
+            length * Math.cos(context.lines[line].angle));
+            context.lines[line].toY = context.lines[line].y + (
+            length * Math.sin(context.lines[line].angle));
+        }
+    }
+
+    // animate callout lines - work out start and end points
+    function calloutLines(context) {
+        var arrayLength = context.arcs.length;
+        var i = 0;
+
+        // initialize during the pipleline, so we can keep an updated radian value
+        // if we change this, we just need to scan over the existing lines and correct.
+        setTimeout(_initializeCalloutLines, context.timeout, context);
+
         context.timeout++;
 
         // 30 pixels long line, drawn a pixel at a time
         for (i = 0; i < context.linelength; i++) {
             context.timeout += 10;
-            setTimeout(function (context, length) {
-                var line = 0;
-                _clearCanvas(context);
-                drawArcs(context);
-                for (line = 0; line < arrayLength; line++) {
-                    context.lines[line].toX = context.lines[line].x + (length * Math.cos(context.lines[line].angle));
-                    context.lines[line].toY = context.lines[line].y + (length * Math.sin(context.lines[line].angle));
-                }
-                drawLines(context);
-            }, context.timeout, context, i);
+            setTimeout(_updateCalloutLines, context.timeout, context, i);
+            context.timeout++;
+            setTimeout(_drawCalloutLines, context.timeout, context);
         }
 
         // need to add lines to the members of the class or arcs so we can split this function off?
-        context.timeout += 10;
-        setTimeout(drawText, context.timeout, context, 45);
+        context.timeout++;
+        setTimeout(_drawText, context.timeout, context, 45);
     }
 
-    function drawText(context, length) {
+    // draw the percentages at the given line length 
+    function _drawText(context, length) {
         var ctx = context.ctx2d;
-
-        ctx.fillStyle = "#000000";
-        ctx.font = "12px Arial";
         var metric;
         var arrayLength = context.lines.length,
             i = 0,
@@ -300,7 +343,10 @@ var AnimPie = (function () {
         var adjust = 0;
         var text = '';
         var degs = 0;
-        //fdh
+
+        ctx.fillStyle = "#000000";
+        ctx.font = "12px Arial";
+
         for (i = 0; i < arrayLength; i++) {
             // first draw the flat lines before drawing the text ontop of them
             degs = radsToDegrees(context.lines[i].angle);
@@ -310,15 +356,12 @@ var AnimPie = (function () {
             text = Math.round(context.arcs[i].percent) + '%';
             metric = ctx.measureText(text);
             //metric.height = calculateTextHeight(ctx.font,text);
-
-
             if (degs > 0 && degs < 180) {
                 ctx.moveTo(context.lines[i].toX, context.lines[i].toY);
                 ctx.lineTo(context.lines[i].toX + metric.width + 5, context.lines[i].toY);
                 ctx.lineWidth = 1;
                 ctx.strokeStyle = '#000000';
                 ctx.stroke();
-                // canvas Y is inverted, so need to worry about height of tex
                 ctx.fillText(text, context.lines[i].toX + 5, context.lines[i].toY - 2);
             } else {
                 ctx.moveTo(context.lines[i].toX, context.lines[i].toY);
@@ -329,7 +372,6 @@ var AnimPie = (function () {
                 ctx.fillText(text, (context.lines[i].toX - metric.width) - 5, context.lines[i].toY - 2);
             }
         }
-
     }
 
     return {
@@ -337,6 +379,9 @@ var AnimPie = (function () {
         getVersion: function () {
             return 1;
         },
+        // main function which instantiates a pie and kicks off the animation
+        // specify the array of data, the identifier of the canvas element, and a callback 
+        // function which is invoked before the animation pipeline begins.
         makePie: function (data, canvasElementId, preWorkFn) {
             // a pie chart constructed for you, pass array of numerics and the canvas element
 
