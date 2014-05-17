@@ -214,7 +214,7 @@ var AnimPie = (function () {
     // expand the arcs in the context so they animate from 10px to context.expandsTo
     function animateCircleExpansion(context) {
         var i = 10;
-        var targetRadius = context.expandsTo; // just easier to read
+        var targetRadius = context.effectbag.expansion.expandsTo; // just easier to read
 
         // helper to clear, adjust and draw arcs given a radius
         function expandCircle(context, radius) {
@@ -269,8 +269,8 @@ var AnimPie = (function () {
     function animateCircleExplosion(context) {
         var i = 0;
         var arrayLength = context.arcs.length;
-        var targetRadius = context.explodesTo;
-        var startingRadius = context.expandsTo;
+        var targetRadius = context.effectbag.explosion.explodesTo;
+        var startingRadius = context.effectbag.expansion.expandsTo;
 
         // initialize the point at which each arc should stop growing.
         function initializeBumpStops(context) {
@@ -283,7 +283,7 @@ var AnimPie = (function () {
             var endY = 0;
 
             for (i = 0; i < arrayLength; i++) {
-                context.arcs[i].explodeCircleBumpStop = (i * context.gapBetweenExplodedArcs) + context.arcs[i].radius;
+                context.arcs[i].explodeCircleBumpStop = (i * context.effectbag.explosion.gapBetweenExplodedArcs) + context.arcs[i].radius;
                 startX = context.arcs[i].originX + context.arcs[i].radius * Math.cos(context.arcs[i].startRadians);
                 startY = context.arcs[i].originY + context.arcs[i].radius * Math.sin(context.arcs[i].startRadians);
                 endX = context.arcs[i].originX + context.arcs[i].radius * Math.cos(context.arcs[i].endRadians);
@@ -373,9 +373,16 @@ var AnimPie = (function () {
 
         // shouldn't this just be the generic draw and we draw what's in the pipleine? TODO
         function drawCalloutLines(context) {
+            var i;
+
             clearCanvas(context);
             drawArcs(context);
             drawLines(context);
+
+
+            for (i = 0; i < context.widgets.length; i++) {
+                context.widgets[i].onDraw(context);
+            }
         }
 
         function updateCalloutLines(context, length) {
@@ -396,7 +403,7 @@ var AnimPie = (function () {
         context.timeout++;
 
         // 30 pixels long line, drawn a pixel at a time
-        for (i = 0; i < context.linelength; i++) {
+        for (i = 0; i < context.effectbag.linecallout.linelength; i++) {
             context.timeout += 10;
             setTimeout(updateCalloutLines, context.timeout, context, i);
             context.timeout++;
@@ -408,6 +415,81 @@ var AnimPie = (function () {
         setTimeout(drawText, context.timeout, context, 45);
     }
 
+    function getMousePosInCanvas(event, canvas) {
+        var totalOffsetX = 0;
+        var totalOffsetY = 0;
+        var currentElement = canvas;
+
+        do {
+            totalOffsetX += currentElement.offsetLeft - currentElement.scrollLeft;
+            totalOffsetY += currentElement.offsetTop - currentElement.scrollTop;
+            currentElement = currentElement.offsetParent;
+        }
+        while (currentElement);
+
+        return {
+            x: event.pageX - totalOffsetX,
+            y: event.pageY - totalOffsetY
+        };
+    }
+
+    function handleMouse(mouse) {
+        // did we hit the close rect?
+        var context = mouse.target.animPieContext;
+        var i;
+        var pos = getMousePosInCanvas(mouse, mouse.target);
+
+        if (context === undefined || context === null) {
+            return;
+        }
+
+        for (i = 0; i < context.widgets.length; i++) {
+            if (pos.x >= context.widgets[i].x && pos.x <= context.widgets[i].x + context.widgets[i].w && pos.y >= context.widgets[i].y && pos.y <= context.widgets[i].y + context.widgets[i].h) {
+                context.widgets[i].onClick(context);
+            }
+        }
+
+    }
+
+    function ScreenWidget(x, y, w, h, clickevent, drawevent) {
+        this.x = x;
+        this.y = y;
+        this.w = w;
+        this.h = h;
+        this.onClick = clickevent;
+        this.onDraw = drawevent;
+    }
+
+    function addScreenWidget(context, x, y, w, h, clickevent, drawhandler) {
+        var widget = new ScreenWidget(x, y, w, h, clickevent, drawhandler);
+        if (context.widgets === undefined || context.widgets === null) {
+            context.widgets = [];
+        }
+        context.widgets[context.widgets.length] = widget;
+        return widget;
+    }
+
+    // set up rectangle and text for close button
+    function setupCloseButton(context) {
+        addScreenWidget(context, 0, 0, context.ctx2d.measureText("Close").width, 10, onCloseClicked, onCloseDraw);
+    }
+
+    function onCloseClicked(context) {
+        // yeah - here you should put some funky CSS
+        context.canvas.style.visibility = "hidden";
+    }
+
+    function onCloseDraw(context) {
+        var ctx = context.ctx2d;
+        //var metric;
+
+        ctx.fillStyle = "#000000";
+        ctx.font = "12px Arial";
+
+        //metric = ctx.measureText("Close");
+        ctx.fillText("Close", 0, 10);
+    }
+
     return {
         // no init right now
         getVersion: function () {
@@ -416,6 +498,7 @@ var AnimPie = (function () {
         // main function which instantiates a pie and kicks off the animation
         // specify the array of data, the identifier of the canvas element, and a callback 
         // function which is invoked before the animation pipeline begins.
+
         makePie: function (data, canvasElementId, preWorkFn) {
             // a pie chart constructed for you, pass array of numerics and the canvas element
 
@@ -427,16 +510,34 @@ var AnimPie = (function () {
 
             // initialize our colour palette
             context.palette = ["#E2DED2", "#D6AABF", "#FFA063", "#E66D00", "#7D2C2B", "#552C2B"];
-            context.timeout = 100; // initial starting time
+            // initial starting time
+            context.timeout = 100;
 
-            // these methods know about a context, which should have an array of arcs
+            // initialize arcs
             context.arcs = getArcsFromData(data);
             setArcsOrigin(context, context.canvas.width / 2, context.canvas.height / 2);
 
-            context.expandsTo = getSquareDistance(context) * 0.2;
-            context.explodesTo = getSquareDistance(context) * 0.5;
-            context.linelength = getSquareDistance(context) * 0.1;
-            context.gapBetweenExplodedArcs = 15;
+            // initialize settings for animation specific storage
+            context.effectbag = {};
+
+            // initialize some of the initial effect parameters
+            context.effectbag.expansion = {};
+            context.effectbag.explosion = {};
+            context.effectbag.linecallout = {};
+            context.effectbag.expansion.expandsTo = getSquareDistance(context) * 0.2;
+
+            context.effectbag.explosion.explodesTo = getSquareDistance(context) * 0.5;
+            context.effectbag.explosion.gapBetweenExplodedArcs = 15;
+
+            context.effectbag.linecallout.linelength = getSquareDistance(context) * 0.07;
+
+            // store our context in the canvas element so event handlers can get rid
+            context.canvas.animPieContext = context;
+
+            // handle click event to capture close
+            context.canvas.onclick = handleMouse;
+
+            setupCloseButton(context);
 
             if (typeof preWorkFn === 'function') {
                 preWorkFn(context);
@@ -448,6 +549,7 @@ var AnimPie = (function () {
             context.timeout += 500; // gap
             animateArcRotation(context);
             animateCalloutLines(context);
+
         }
     };
 }());
