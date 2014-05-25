@@ -31,10 +31,8 @@ window.requestAnimFrame = (function () {
 
 var AnimPie = (function () {
     'use strict';
-    var settings; // unused right now
 
     // UTILS
-    // why isn't this already standard!
     function radsToDegrees(rad) {
         // afford some level of protection to keep degrees 0-360
         if (rad < 0) {
@@ -175,9 +173,10 @@ var AnimPie = (function () {
         var text = '';
         var degs = 0;
 
+        // we are called during the drawing loop and our objects may not yet be ready.
         if (typeof context.lines === 'undefined' || typeof context.lines.showtext === 'undefined') {
             return;
-        } // not ready yet 
+        } 
         if (context.lines.showtext !== true) {
             return;
         }
@@ -214,7 +213,7 @@ var AnimPie = (function () {
         }
     }
 
-    // timing & draw  loop
+    // animation & draw  loop
     function animate(context) {
         if (!context.done) {
             if (context.animationStarted === false) {
@@ -447,6 +446,7 @@ var AnimPie = (function () {
         });
     }
 
+    // helper to detect when widgets are pressed
     function getMousePosInCanvas(event, canvas) {
         var totalOffsetX = 0;
         var totalOffsetY = 0;
@@ -465,6 +465,7 @@ var AnimPie = (function () {
         };
     }
 
+    // helper for widget click detection
     function handleMouse(mouse) {
         // did we hit the close rect?
         var context = mouse.target.animPieContext;
@@ -483,6 +484,7 @@ var AnimPie = (function () {
 
     }
 
+    // build up an arbitrary screen widget in the canvas with a click and draw function
     function ScreenWidget(x, y, w, h, clickevent, drawevent) {
         this.x = x;
         this.y = y;
@@ -513,12 +515,9 @@ var AnimPie = (function () {
 
     function onCloseDraw(context) {
         var ctx = context.ctx2d;
-        //var metric;
 
         ctx.fillStyle = "#000000";
         ctx.font = "12px Arial";
-
-        //metric = ctx.measureText("Close");
         ctx.fillText("Close", 0, 10);
     }
     return {
@@ -590,18 +589,3 @@ var AnimPie = (function () {
         }
     };
 }());
-
-
-/* not used but might be useful to you.
-function calculateTextHeight(fontInlineStyle,text) {
-  var body = document.getElementsByTagName("body")[0],
-      tempelement = document.createElement("div"),
-      result=0;
-   
-  tempelement.setAttribute("style",fontInlineStyle+';position: absolute'); // prevent reflow
-  tempelement.appendChild(document.createTextNode(text));
-  body.appendChild(tempelement);
-  result = tempelement.offsetHeight;
-  body.removeChild(tempelement);
-  return result;
-};*/
