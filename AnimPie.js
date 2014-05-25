@@ -21,14 +21,6 @@
 // Usage: AnimPie.makePie([30, 50, 40, 20, 10, 32], "c");
 // "c" is the canvas element (for now ~500,500px width).
 
-// Lots more to do:
-// extract out common math functions
-// Make this part of a bigger library?
-// allow configuration of durations, radius extensions
-// allow plugin of colours
-// review the animation mechanism/maybe do this in D3?
-// performance tune/tweak/use tweens?
-// review comments etc
 
 // use the more friendly requestAnimationFrame
 window.requestAnimFrame = (function () {
@@ -268,7 +260,7 @@ var AnimPie = (function () {
         drawText(context);
 
         if (doneTime < currentTimeIntoAnimation) {
-            console.log("stopping animation");
+            //console.log("stopping animation");
             context.done = true;
 
             // now draw screen widgets
@@ -592,9 +584,6 @@ var AnimPie = (function () {
             // just turns text on at the end
             context.animations[context.animations.length] = new Animation(4500, 4600, function (context, currentTime) {
                 context.lines.showtext = true;
-            });
-            context.animations[context.animations.length] = new Animation(4600, 4700, function (context, currentTime) {
-                context.showCancel = true;
             });
 
             animate(context);
