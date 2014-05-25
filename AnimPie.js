@@ -30,6 +30,13 @@
 // performance tune/tweak/use tweens?
 // review comments etc
 
+// use the more friendly requestAnimationFrame
+window.requestAnimFrame = (function () {
+    return window.requestAnimationFrame || window.webkitRequestAnimationFrame || window.mozRequestAnimationFrame || function (callback) {
+        window.setTimeout(callback, 1000 / 60);
+    };
+})();
+
 var AnimPie = (function () {
     'use strict';
     var settings; // unused right now
@@ -142,9 +149,17 @@ var AnimPie = (function () {
 
     // draw the callout lines
     function drawLines(context) {
-        var arrayLength = context.lines.length;
+
+        var arrayLength = 0;
         var ctx = context.ctx2d;
         var i = 0;
+
+        // lines may not have been created yet
+        if (typeof context.lines === 'undefined') {
+            return;
+        }
+
+        arrayLength = context.lines.length;
 
         for (i = 0; i < arrayLength; i++) {
             ctx.beginPath();
@@ -157,16 +172,25 @@ var AnimPie = (function () {
     }
 
     // draw the percentages at the given line length 
-    function drawText(context, length) {
+    function drawText(context) {
         var ctx = context.ctx2d;
         var metric;
-        var arrayLength = context.lines.length,
+        var arrayLength = 0,
             i = 0,
             x = 0,
             y = 0;
         var adjust = 0;
         var text = '';
         var degs = 0;
+
+        if (typeof context.lines === 'undefined' || typeof context.lines.showtext === 'undefined') {
+            return;
+        } // not ready yet 
+        if (context.lines.showtext !== true) {
+            return;
+        }
+
+        arrayLength = context.lines.length;
 
         ctx.fillStyle = "#000000";
         ctx.font = "12px Arial";
@@ -198,6 +222,64 @@ var AnimPie = (function () {
         }
     }
 
+    // timing & draw  loop
+    function animate(context) {
+        if (!context.done) {
+            if (context.animationStarted === false) {
+                context.animationStarted = true;
+                context.animationStartTime = new Date().getTime();
+            }
+            requestAnimFrame(function () {
+                animate(context);
+            });
+            draw(context);
+        } else {
+            // reset object
+            context.animationStarted = false;
+        }
+    }
+
+    function Animation(start, end, animationFunc) {
+        this.startTime = start;
+        this.endTime = end;
+        this.process = animationFunc; // make sure it has context,timeIntoAnimation
+        this.needsProcessing = function (time) {
+            return (time >= this.startTime && time <= this.endTime);
+        };
+    }
+
+    function draw(context) {
+
+        var currentTimeIntoAnimation = new Date().getTime() - context.animationStartTime;
+        // discover which animations need processing
+        // an animation has a start time, end time and processing function
+        var index = 0;
+        var doneTime = 0;
+        for (index = 0; index < context.animations.length; index++) {
+            if (context.animations[index].needsProcessing(currentTimeIntoAnimation)) {
+                context.animations[index].process(context, currentTimeIntoAnimation);
+            }
+            if (context.animations[index].endTime > doneTime) doneTime = context.animations[index].endTime;
+        }
+
+        clearCanvas(context);
+        drawArcs(context);
+        drawLines(context);
+        drawText(context);
+
+        if (doneTime < currentTimeIntoAnimation) {
+            console.log("stopping animation");
+            context.done = true;
+
+            // now draw screen widgets
+            for (index = 0; index < context.widgets.length; index++) {
+                context.widgets[index].onDraw(context);
+            }
+        }
+
+    }
+
+
     // helper function to clear the drawing surface
     function clearCanvas(context) {
         context.ctx2d.clearRect(0, 0, context.canvas.width, context.canvas.height);
@@ -212,68 +294,58 @@ var AnimPie = (function () {
     // ANIMATIONS
 
     // expand the arcs in the context so they animate from 10px to context.expandsTo
-    function animateCircleExpansion(context) {
+    function animateCircleExpansion(context, start, stop) {
         var i = 10;
         var targetRadius = context.effectbag.expansion.expandsTo; // just easier to read
 
-        // helper to clear, adjust and draw arcs given a radius
-        function expandCircle(context, radius) {
-            clearCanvas(context);
+        context.animations[context.animations.length] = new Animation(start, stop, function (context, currentTime) {
+            // set the arcs radius proportionate to 
+            var radius = (targetRadius / stop) * currentTime;
             setArcsRadius(context, radius);
-            drawArcs(context);
-        }
-
-        // achieve this at 40fps, 40ms
-        for (i = 10; i < targetRadius; i += ((targetRadius - 10) / 40)) {
-            context.timeout += 25;
-            setTimeout(expandCircle,
-            context.timeout,
-            context,
-            i);
-        }
+        });
     }
-
-    // helper to rotate arcs given a number of degrees to increment the arcs by
-    function rotateArcs(context, increment) {
-        var i = 0;
-        var arrayLength = context.arcs.length;
-
-        for (i = 0; i < arrayLength; i++) {
-            if (increment % 2 === 0) {
-                increment *= -1; // invert direction of evens
-            }
-            context.arcs[i].startRadians = degsToRadians(radsToDegrees(context.arcs[i].startRadians) + increment);
-            context.arcs[i].endRadians = degsToRadians(radsToDegrees(context.arcs[i].endRadians) + increment);
-        }
-        clearCanvas(context);
-        drawArcs(context);
-    }
-
 
     // main function controlling the rotation stage
     // loop through N degrees and update the radians and draw.
-    function animateArcRotation(context) {
-        var degs = 0;
-        var increment = 4; // the amount of degrees to animate by per frame
+    function animateArcRotation(context, start, stop) {
 
-        for (degs = 0; degs < 180; degs += increment) {
-            context.timeout += 20;
-            setTimeout(rotateArcs,
-            context.timeout,
-            context,
-            increment);
-        }
+        context.animations[context.animations.length] = new Animation(start, stop, function (context, currentTime) {
+
+            var degrees = (((180) / (stop - start)) * (currentTime - start));
+            var arrayLength = context.arcs.length;
+            var i = 0;
+
+            if (typeof context.effectbag.arcRotations === 'undefined') {
+                context.effectbag.arcRotations = {};
+                context.effectbag.arcRotations.start = [];
+                context.effectbag.arcRotations.end = [];
+
+                // record original starting point to make life easier in the calculation
+                for (i = 0; i < arrayLength; i++) {
+                    context.effectbag.arcRotations.start[i] = radsToDegrees(context.arcs[i].startRadians);
+                    context.effectbag.arcRotations.end[i] = radsToDegrees(context.arcs[i].endRadians);
+                }
+            }
+
+            for (i = 0; i < arrayLength; i++) {
+                if (i % 2 === 0) {
+                    degrees *= -1; // invert direction of degrees
+                }
+                context.arcs[i].startRadians = degsToRadians(context.effectbag.arcRotations.start[i] + degrees);
+                context.arcs[i].endRadians = degsToRadians(context.effectbag.arcRotations.end[i] + degrees);
+            }
+        });
     }
 
     // main function controlling the initial expansion stage
-    function animateCircleExplosion(context) {
+    function animateCircleExplosion(context, start, stop) {
         var i = 0;
         var arrayLength = context.arcs.length;
         var targetRadius = context.effectbag.explosion.explodesTo;
         var startingRadius = context.effectbag.expansion.expandsTo;
 
         // initialize the point at which each arc should stop growing.
-        function initializeBumpStops(context) {
+        (function initializeBumpStops(context) {
             var i = 0;
             var arrayLength = context.arcs.length;
             var euclidianDistance = 0;
@@ -283,11 +355,13 @@ var AnimPie = (function () {
             var endY = 0;
 
             for (i = 0; i < arrayLength; i++) {
-                context.arcs[i].explodeCircleBumpStop = (i * context.effectbag.explosion.gapBetweenExplodedArcs) + context.arcs[i].radius;
-                startX = context.arcs[i].originX + context.arcs[i].radius * Math.cos(context.arcs[i].startRadians);
-                startY = context.arcs[i].originY + context.arcs[i].radius * Math.sin(context.arcs[i].startRadians);
-                endX = context.arcs[i].originX + context.arcs[i].radius * Math.cos(context.arcs[i].endRadians);
-                endY = context.arcs[i].originY + context.arcs[i].radius * Math.sin(context.arcs[i].endRadians);
+                context.arcs[i].explodeCircleBumpStop = (i * context.effectbag.explosion.gapBetweenExplodedArcs) + startingRadius;
+
+                // prepare to work out what angle we need to project at
+                startX = context.arcs[i].originX + startingRadius * Math.cos(context.arcs[i].startRadians);
+                startY = context.arcs[i].originY + startingRadius * Math.sin(context.arcs[i].startRadians);
+                endX = context.arcs[i].originX + startingRadius * Math.cos(context.arcs[i].endRadians);
+                endY = context.arcs[i].originY + startingRadius * Math.sin(context.arcs[i].endRadians);
                 euclidianDistance = getEuclidianDistance(startX, startY, endX, endY);
                 // should probably put these under 'explodedetails' object as they are temporary
                 // we need to know the euclidian distance (distance between two points) so that we can use atan2 to work out what 
@@ -296,21 +370,26 @@ var AnimPie = (function () {
                 context.arcs[i].euclidianHalfDistance = euclidianDistance / 2;
                 context.arcs[i].radianMidPoint = context.arcs[i].startRadians + ((context.arcs[i].endRadians - context.arcs[i].startRadians) / 2);
             }
-
-        }
+        })(context);
 
         // draws segments of the donut expanded away from a starting point
-        function explodeCircle(radius, context) {
+        context.animations[context.animations.length] = new Animation(start, stop, function (context, currentTime) {
+            // set the arcs radius proportionate to 
             // now for each of the segments start stripping them apart from each other
             // first segment stays at starting radius
             // other segments move out to radius and lock in position when they are apart.
             var arrayLength = context.arcs.length;
             var i = 0;
             var newRadians = 0;
+            var targetRadius = context.effectbag.explosion.explodesTo;
+            var startingRadius = context.effectbag.expansion.expandsTo;
+
+            var radius = startingRadius + (((targetRadius - startingRadius) / (stop - start)) * (currentTime - start));
 
             for (i = 0; i < arrayLength; i++) {
                 if (context.arcs[i].radius < context.arcs[i].explodeCircleBumpStop) {
                     // calculate new start and end radian based on new radius and euclidian distance
+
                     context.arcs[i].radius = radius;
                     // we know the distance, and we know the radius, so use TAN to get the angle from the center.
                     newRadians = Math.atan(context.arcs[i].euclidianHalfDistance / radius);
@@ -325,29 +404,11 @@ var AnimPie = (function () {
                 }
 
             }
-            clearCanvas(context);
-            drawArcs(context);
-        }
-        // ensure this code is run just before the animation starts, otherwise
-        // radius might not be correct
-        context.timeout += 100;
-
-        setTimeout(initializeBumpStops, context.timeout, context);
-
-        context.timeout += 100;
-        // achieve this in 1 second at 40fps
-        for (i = startingRadius; i < targetRadius; i = i + ((targetRadius - startingRadius) / 40)) {
-            context.timeout += 25;
-            setTimeout(explodeCircle,
-            context.timeout,
-            i,
-            context);
-        }
-        context.timeout += 100;
+        });
     }
 
     // animate callout lines - work out start and end points
-    function animateCalloutLines(context) {
+    function animateCalloutLines(context, start, stop) {
         var arrayLength = context.arcs.length;
         var i = 0;
 
@@ -371,20 +432,6 @@ var AnimPie = (function () {
             }
         }
 
-        // shouldn't this just be the generic draw and we draw what's in the pipleine? TODO
-        function drawCalloutLines(context) {
-            var i;
-
-            clearCanvas(context);
-            drawArcs(context);
-            drawLines(context);
-
-
-            for (i = 0; i < context.widgets.length; i++) {
-                context.widgets[i].onDraw(context);
-            }
-        }
-
         function updateCalloutLines(context, length) {
             var line = 0;
             var arrayLength = context.lines.length;
@@ -395,24 +442,17 @@ var AnimPie = (function () {
                 length * Math.sin(context.lines[line].angle));
             }
         }
-        context.timeout++;
-        // initialize during the pipleline, so we can keep an updated radian value
-        // if we change this, we just need to scan over the existing lines and correct.
-        setTimeout(initializeCalloutLines, context.timeout, context);
 
-        context.timeout++;
+        context.animations[context.animations.length] = new Animation(start, stop, function (context, currentTime) {
+            var lineLengthForTimePeriod = 0;
+            if (typeof context.lines === 'undefined') {
+                initializeCalloutLines(context);
+            }
 
-        // 30 pixels long line, drawn a pixel at a time
-        for (i = 0; i < context.effectbag.linecallout.linelength; i++) {
-            context.timeout += 10;
-            setTimeout(updateCalloutLines, context.timeout, context, i);
-            context.timeout++;
-            setTimeout(drawCalloutLines, context.timeout, context);
-        }
-
-        // need to add lines to the members of the class or arcs so we can split this function off?
-        context.timeout++;
-        setTimeout(drawText, context.timeout, context, 45);
+            // line length is a proportion of the length depending on how far through we are
+            lineLengthForTimePeriod = (((context.effectbag.linecallout.linelength) / (stop - start)) * (currentTime - start));
+            updateCalloutLines(context, lineLengthForTimePeriod);
+        });
     }
 
     function getMousePosInCanvas(event, canvas) {
@@ -489,7 +529,6 @@ var AnimPie = (function () {
         //metric = ctx.measureText("Close");
         ctx.fillText("Close", 0, 10);
     }
-
     return {
         // no init right now
         getVersion: function () {
@@ -504,14 +543,16 @@ var AnimPie = (function () {
 
             var context = {};
 
+            context.done = false; // animation done?
+            context.animationStarted = false;
+            context.animations = [];
+
             // find canvas element and drawing context
             context.canvas = document.getElementById(canvasElementId);
             context.ctx2d = context.canvas.getContext("2d");
 
             // initialize our colour palette
             context.palette = ["#E2DED2", "#D6AABF", "#FFA063", "#E66D00", "#7D2C2B", "#552C2B"];
-            // initial starting time
-            context.timeout = 100;
 
             // initialize arcs
             context.arcs = getArcsFromData(data);
@@ -543,13 +584,20 @@ var AnimPie = (function () {
                 preWorkFn(context);
             }
 
-            animateCircleExpansion(context);
-            context.timeout += 500; // gap
-            animateCircleExplosion(context);
-            context.timeout += 500; // gap
-            animateArcRotation(context);
-            animateCalloutLines(context);
+            animateCircleExpansion(context, 0, 1000);
+            animateCircleExplosion(context, 1500, 2500);
+            animateArcRotation(context, 2500, 3500);
+            animateCalloutLines(context, 3500, 4500);
 
+            // just turns text on at the end
+            context.animations[context.animations.length] = new Animation(4500, 4600, function (context, currentTime) {
+                context.lines.showtext = true;
+            });
+            context.animations[context.animations.length] = new Animation(4600, 4700, function (context, currentTime) {
+                context.showCancel = true;
+            });
+
+            animate(context);
         }
     };
 }());
