@@ -12,7 +12,7 @@ You can then create a pie chart that looks really cool just by calling it with y
 
 AnimPie.makePie([30, 50, 40, 20, 10, 32], "c");
 
-See the latest example in the jsfiddle referenced in the description of this repository.
+Here's an example: http://jsfiddle.net/8qh9X/91/ 
 
 See Anim.js for licence and more details (MIT)
 
